@@ -1,0 +1,823 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+
+// Importacao dos pacotes instalados
+import 'package:archive/archive_io.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
+
+// Importacoes especificas para Mobile
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
+import 'package:flutter_email_sender/flutter_email_sender.dart';
+import 'package:image_picker/image_picker.dart';
+
+// Importacao condicional para nao quebrar no Mobile devido ao 'dart:html'
+import 'package:universal_html/html.dart' as html;
+import 'dart:io' as io;
+
+class RecebimentoTerminalScreen extends StatefulWidget {
+  const RecebimentoTerminalScreen({super.key});
+
+  @override
+  State<RecebimentoTerminalScreen> createState() =>
+      _RecebimentoTerminalScreenState();
+}
+
+class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final ImagePicker _picker = ImagePicker();
+  final _numeroSerieController = TextEditingController();
+
+  final _numeroReqController = TextEditingController();
+
+  String? _modeloSelecionado;
+  final List<String> _modelosDisponiveis = [
+    '4020A',
+    '4020B',
+    '4020-001',
+    '4020-002',
+    '4020-003',
+    '4020-004',
+  ];
+
+  // --- VARIAVEIS PARA OS ANEXOS PRINCIPAIS ---
+  List<String> _etiquetaNomes = [];
+  List<List<int>> _etiquetaBytes = [];
+
+  List<String> _kitCompletoNomes = [];
+  List<List<int>> _kitCompletoBytes = [];
+
+  final List<Map<String, dynamic>> _perifericos = [
+    {
+      'nome': 'Gabinete/Chassi',
+      'possui': true,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+    },
+    {
+      'nome': 'Monitor',
+      'possui': true,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+    },
+    {
+      'nome': 'Pinpad',
+      'possui': false,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+      'modelo': null,
+    },
+    {
+      'nome': 'Leitor Biometrico',
+      'possui': false,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+      'minex_iii': null,
+    },
+    {
+      'nome': 'Leitor de Codigo de Barras e Suporte',
+      'possui': false,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+    },
+    {
+      'nome': 'Impressora',
+      'possui': false,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+    },
+    {
+      'nome': 'Teclado',
+      'possui': false,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+    },
+    {
+      'nome': 'Nobreak',
+      'possui': false,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+    },
+  ];
+
+  final List<String> _modelosPinpad = [
+    'PPC920',
+    'PPC930',
+    'PPP100-2023',
+    'PPP100-2025',
+  ];
+
+  @override
+  void dispose() {
+    _numeroSerieController.dispose();
+    _numeroReqController.dispose();
+    for (var p in _perifericos) {
+      p['obs'].dispose();
+    }
+    super.dispose();
+  }
+
+  // Função auxiliar para pegar a imagem da fonte escolhida (Câmera ou Galeria)
+  Future<XFile?> _escolherOrigemImagem() async {
+    ImageSource? fonte = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.indigo),
+              title: const Text('Tirar Foto (Câmera)'),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.indigo),
+              title: const Text('Escolher da Galeria'),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (fonte != null) {
+      return await _picker.pickImage(
+        source: fonte,
+        imageQuality: 85,
+      ); // Compacta levemente para não estourar o e-mail
+    }
+    return null;
+  }
+
+Future<void> _abrirSeletorFoto(int index) async {
+    // 1. Usamos o pickMultiImage para abrir a galeria permitindo selecionar várias de uma vez
+    final List<XFile> fotosSelecionadas = await _picker.pickMultiImage(
+      imageQuality: 85, // Mantém a compactação ativa para todas
+    );
+
+    if (fotosSelecionadas.isNotEmpty) {
+      // Criamos cópias seguras das listas atuais do periférico
+      List<String> nomesAtualizados = List<String>.from(_perifericos[index]['fotos_nomes']);
+      List<List<int>> bytesAtualizados = List<List<int>>.from(_perifericos[index]['fotos_bytes']);
+
+      // 2. Lemos os bytes de cada foto selecionada e adicionamos nas listas
+      for (var foto in fotosSelecionadas) {
+        final bytes = await foto.readAsBytes();
+        nomesAtualizados.add(foto.name);
+        bytesAtualizados.add(bytes);
+      }
+
+      // 3. Atualizamos o estado do widget
+      setState(() {
+        _perifericos[index]['fotos_nomes'] = nomesAtualizados;
+        _perifericos[index]['fotos_bytes'] = bytesAtualizados;
+      });
+    }
+  }
+
+  Future<void> _abrirSeletorFotoPrincipal(bool esEtiqueta) async {
+    final List<XFile> fotosSelecionadas = await _picker.pickMultiImage(
+      imageQuality: 85,
+    );
+
+    if (fotosSelecionadas.isNotEmpty) {
+      List<String> nomesNovos = [];
+      List<List<int>> bytesNovos = [];
+
+      for (var foto in fotosSelecionadas) {
+        final bytes = await foto.readAsBytes();
+        nomesNovos.add(foto.name);
+        bytesNovos.add(bytes);
+      }
+
+      setState(() {
+        if (esEtiqueta) {
+          _etiquetaNomes = List<String>.from(_etiquetaNomes)..addAll(nomesNovos);
+          _etiquetaBytes = List<List<int>>.from(_etiquetaBytes)..addAll(bytesNovos);
+        } else {
+          _kitCompletoNomes = List<String>.from(_kitCompletoNomes)..addAll(nomesNovos);
+          _kitCompletoBytes = List<List<int>>.from(_kitCompletoBytes)..addAll(bytesNovos);
+        }
+      });
+    }
+  }
+
+  // --- MODAL INSTRUTIVO EXCLUSIVO PARA O AMBIENTE WEB ---
+  void _mostrarAvisoAnexoWeb(String nomeArquivo, VoidCallback onConfirmar) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              SizedBox(width: 10),
+              Text('Atencao: Proximo Passo!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'O arquivo de vistoria foi gerado e o download iniciou automaticamente com o nome:',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Text(
+                  nomeArquivo,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'monospace',
+                    color: Colors.indigo,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 15),
+              const Text(
+                'Ao clicar no botao abaixo, seu e-mail sera aberto. Voce DEVE anexar este arquivo manualmente antes de enviar.',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                onConfirmar();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+              child: const Text(
+                'Entendi, abrir E-mail',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // --- PROCESSAMENTO PRINCIPAL COM REGRAS DE COMPARTILHAMENTO HIBRIDO ---
+  Future<void> _processarEEnviar() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_etiquetaBytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, anexe a foto da etiqueta.')),
+      );
+      return;
+    }
+    if (_kitCompletoBytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, anexe a foto do kit completo.'),
+        ),
+      );
+      return;
+    }
+
+    for (var p in _perifericos) {
+      if (p['possui'] == true) {
+        if ((p['fotos_bytes'] as List).isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Anexe pelo menos uma foto de: ${p['nome']}'),
+            ),
+          );
+          return;
+        }
+        if (p['nome'] == 'Pinpad' && p['modelo'] == null) return;
+        if (p['nome'] == 'Leitor Biometrico' && p['minex_iii'] == null) return;
+      }
+    }
+
+    Map<String, dynamic> dadosFormulario = {
+      "data_registro": DateTime.now().toIso8601String(),
+      "numero_serie": int.parse(_numeroSerieController.text),
+      "numero_req": _numeroReqController.text.trim().isNotEmpty
+          ? _numeroReqController.text.trim()
+          : null,
+      "modelo_terminal": _modeloSelecionado,
+      "fotos_etiqueta": _etiquetaNomes
+          .map(
+            (nome) => "imagens/${_numeroSerieController.text}_etiqueta_$nome",
+          )
+          .toList(),
+      "fotos_kit_completo": _kitCompletoNomes
+          .map((nome) => "imagens/${_numeroSerieController.text}_kit_$nome")
+          .toList(),
+      "perifericos": _perifericos.map((p) {
+        Map<String, dynamic> info = {"nome": p['nome'], "possui": p['possui']};
+        if (p['possui'] == true) {
+          info["observacoes"] = p['obs'].text;
+          List<String> nomes = p['fotos_nomes'] as List<String>;
+          info["caminhos_fotos"] = nomes
+              .map((nome) => "imagens/${_numeroSerieController.text}_$nome")
+              .toList();
+          if (p['nome'] == 'Pinpad') info["modelo_especifico"] = p['modelo'];
+          if (p['nome'] == 'Leitor Biometrico')
+            info["minex_iii"] = p['minex_iii'];
+        }
+        return info;
+      }).toList(),
+    };
+
+    String jsonString = const JsonEncoder.withIndent(
+      '  ',
+    ).convert(dadosFormulario);
+
+    var encoder = Archive();
+    List<int> jsonBytes = utf8.encode(jsonString);
+    encoder.addFile(ArchiveFile('dados.json', jsonBytes.length, jsonBytes));
+
+    for (int i = 0; i < _etiquetaNomes.length; i++) {
+      encoder.addFile(
+        ArchiveFile(
+          'imagens/${_numeroSerieController.text}_etiqueta_${_etiquetaNomes[i]}',
+          _etiquetaBytes[i].length,
+          _etiquetaBytes[i],
+        ),
+      );
+    }
+
+    for (int i = 0; i < _kitCompletoNomes.length; i++) {
+      encoder.addFile(
+        ArchiveFile(
+          'imagens/${_numeroSerieController.text}_kit_${_kitCompletoNomes[i]}',
+          _kitCompletoBytes[i].length,
+          _kitCompletoBytes[i],
+        ),
+      );
+    }
+
+    for (var p in _perifericos) {
+      if (p['possui'] == true) {
+        List<String> nomes = p['fotos_nomes'] as List<String>;
+        List<List<int>> bytesList = p['fotos_bytes'] as List<List<int>>;
+        for (int i = 0; i < nomes.length; i++) {
+          String nomeArquivo = "${_numeroSerieController.text}_${nomes[i]}";
+          encoder.addFile(
+            ArchiveFile(
+              'imagens/$nomeArquivo',
+              bytesList[i].length,
+              bytesList[i],
+            ),
+          );
+        }
+      }
+    }
+
+    List<int>? zipData = ZipEncoder().encode(encoder);
+    if (zipData == null) return;
+
+    String nomeArquivoZip = "recebimento_${_numeroSerieController.text}.zip";
+
+    const String emailDestinopadrao = "ciaussp07@caixa.gov.br";
+    final String assuntoPadrao =
+        "Vistoria Tecnica - TFL Serial: ${_numeroSerieController.text}";
+    final String reqDigitada = _numeroReqController.text.trim();
+    final String linhaCorpoReq = reqDigitada.isNotEmpty
+        ? "REQ: $reqDigitada\n\n"
+        : "";
+    final String corpoMensagemBase =
+        "Ola,\n\n"
+        "A vistoria de recebimento tecnico do terminal de numero de serie ${_numeroSerieController.text} (Modelo: $_modeloSelecionado) foi concluida.\n\n"
+        "$linhaCorpoReq" // <--- A linha da REQ entra magicamente aqui (apenas se não for vazia)
+        "Os dados brutos e fotos comprimidas seguem empacotados no arquivo: $nomeArquivoZip.\n\n"
+        "Att,\n"
+        "Equipe de Triagem em Campo.";
+
+    if (kIsWeb) {
+      final blob = html.Blob([zipData], 'application/zip');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute("download", nomeArquivoZip)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      _mostrarAvisoAnexoWeb(nomeArquivoZip, () async {
+        final Uri emailUri = Uri.parse(
+          "mailto:$emailDestinopadrao"
+          "?subject=${Uri.encodeComponent(assuntoPadrao)}"
+          "&body=${Uri.encodeComponent(corpoMensagemBase)}",
+        );
+        if (await canLaunchUrl(emailUri)) {
+          await launchUrl(emailUri);
+        }
+      });
+    } else {
+      // 1. Salva o arquivo ZIP na memoria temporaria do celular
+      final directory = await getTemporaryDirectory();
+      final stringPath = '${directory.path}/$nomeArquivoZip';
+
+      final file = io.File(stringPath);
+      await file.writeAsBytes(zipData);
+
+      // 2. Cria a estrutura direcionada estritamente para o App de E-mail
+      final Email email = Email(
+        body: corpoMensagemBase,
+        subject: assuntoPadrao,
+        recipients: [
+          emailDestinopadrao,
+        ], // <--- O destinatario fixo entra aqui!
+        attachmentPaths: [stringPath], // <--- O arquivo ZIP entra preso aqui!
+        isHTML: false,
+      );
+
+      try {
+        // 3. Dispara diretamente o Gmail/Outlook com tudo preenchido
+        await FlutterEmailSender.send(email);
+      } catch (error) {
+        // Caso ocorra falha (ex: celular sem nenhum app de e-mail configurado), usa o plano B
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Erro ao abrir app de e-mail. Usando compartilhamento padrao...',
+            ),
+          ),
+        );
+        await Share.shareXFiles(
+          [XFile(stringPath)],
+          subject: assuntoPadrao,
+          text: corpoMensagemBase,
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Recebimento Tecnico de Terminais'),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Dados Principais do Terminal',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo,
+                  ),
+                ),
+                const Divider(),
+                const SizedBox(height: 10),
+
+                TextFormField(
+                  controller: _numeroSerieController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Numero de Serie (Apenas Numeros) *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.pin),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty)
+                      return 'Campo obrigatorio';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 15),
+                TextFormField(
+                  controller: _numeroReqController,
+                  keyboardType: TextInputType
+                      .text, // Permite letras e números se necessário
+                  decoration: const InputDecoration(
+                    labelText: 'Número de REQ',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(
+                      Icons.receipt_long,
+                    ), // Ícone bonitinho de relatório/recibo
+                  ),
+                  validator: (value) => null,
+                ),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: _modeloSelecionado,
+                  decoration: const InputDecoration(
+                    labelText: 'Modelo do Terminal *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.devices),
+                  ),
+                  items: _modelosDisponiveis
+                      .map(
+                        (model) =>
+                            DropdownMenuItem(value: model, child: Text(model)),
+                      )
+                      .toList(),
+                  onChanged: (val) => setState(() => _modeloSelecionado = val),
+                  validator: (value) =>
+                      value == null ? 'Selecione um modelo' : null,
+                ),
+
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => _abrirSeletorFotoPrincipal(true),
+                      icon: const Icon(Icons.qr_code),
+                      label: const Text('Foto Etiqueta *'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[200],
+                        foregroundColor: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Text(
+                        _etiquetaNomes.isEmpty
+                            ? 'Nenhuma foto da etiqueta (Sem anexo)'
+                            : '${_etiquetaNomes.length} foto(s) da etiqueta',
+                        style: TextStyle(
+                          color: _etiquetaBytes.isNotEmpty
+                              ? Colors.green
+                              : Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => _abrirSeletorFotoPrincipal(false),
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('Foto Kit Completo *'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[200],
+                        foregroundColor: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Text(
+                        _kitCompletoNomes.isEmpty
+                            ? 'Nenhuma foto do kit completo (Sem anexo)'
+                            : '${_kitCompletoNomes.length} foto(s) do kit',
+                        style: TextStyle(
+                          color: _kitCompletoBytes.isNotEmpty
+                              ? Colors.green
+                              : Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 35),
+                const Text(
+                  'Verificacao de Peças e Periféricos',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo,
+                  ),
+                ),
+                const Divider(),
+
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _perifericos.length,
+                  itemBuilder: (context, index) {
+                    final peri = _perifericos[index];
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      elevation: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SwitchListTile(
+                              title: Text(
+                                peri['nome'],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              subtitle: Text(
+                                peri['possui']
+                                    ? 'Status: Possui'
+                                    : 'Status: Nao possui',
+                              ),
+                              value: peri['possui'],
+                              activeColor: Colors.indigo,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  peri['possui'] = value;
+                                  if (!value) {
+                                    peri['obs'].clear();
+                                    peri['fotos_nomes'] = <String>[];
+                                    peri['fotos_bytes'] = <List<int>>[];
+                                    if (peri.containsKey('modelo'))
+                                      peri['modelo'] = null;
+                                    if (peri.containsKey('minex_iii'))
+                                      peri['minex_iii'] = null;
+                                  }
+                                });
+                              },
+                            ),
+
+                            if (peri['possui'] == true) ...[
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Divider(height: 1),
+                              ),
+                              const SizedBox(height: 12),
+
+                              if (peri['nome'] == 'Pinpad') ...[
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 5,
+                                  ),
+                                  child: DropdownButtonFormField<String>(
+                                    value: peri['modelo'],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Modelo do Pinpad *',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: _modelosPinpad
+                                        .map(
+                                          (m) => DropdownMenuItem(
+                                            value: m,
+                                            child: Text(m),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (val) =>
+                                        setState(() => peri['modelo'] = val),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+
+                              if (peri['nome'] == 'Leitor Biometrico') ...[
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Text(
+                                        'E padrao MINEX III? * ',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      ChoiceChip(
+                                        label: const Text('Sim'),
+                                        selected: peri['minex_iii'] == true,
+                                        onSelected: (val) => setState(
+                                          () => peri['minex_iii'] = true,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      ChoiceChip(
+                                        label: const Text('Não'),
+                                        selected: peri['minex_iii'] == false,
+                                        onSelected: (val) => setState(
+                                          () => peri['minex_iii'] = false,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                              ],
+
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: TextFormField(
+                                  controller: peri['obs'],
+                                  // Ativa a expansão dinâmica:
+                                  minLines:
+                                      1, // Começa bonitinho ocupando apenas 1 linha
+                                  maxLines:
+                                      5, // Cresce de forma fluida até o limite de 5 linhas (parágrafos)
+                                  keyboardType: TextInputType
+                                      .multiline, // Permite que a tecla "Enter" quebre a linha no teclado do celular
+                                  decoration: const InputDecoration(
+                                    labelText: 'Observacoes da peça/periférico',
+                                    border: OutlineInputBorder(),
+                                    alignLabelWithHint:
+                                        true, // Garante que o texto de dica/rótulo comece no topo quando o campo expandir
+                                  ),
+                                ),
+                              ),
+
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () => _abrirSeletorFoto(index),
+                                      icon: const Icon(Icons.camera_alt),
+                                      label: const Text('Anexar Fotos *'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.grey[200],
+                                        foregroundColor: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    Expanded(
+                                      child: Text(
+                                        (peri['fotos_nomes'] as List).isEmpty
+                                            ? 'Nenhuma foto anexada (Falta anexo)'
+                                            : '${(peri['fotos_nomes'] as List).length} foto(s) selecionada(s)',
+                                        style: TextStyle(
+                                          color:
+                                              (peri['fotos_bytes'] as List)
+                                                  .isNotEmpty
+                                              ? Colors.green
+                                              : Colors.red,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _processarEEnviar,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text(
+                      'Compactar dados e Enviar E-mail',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
