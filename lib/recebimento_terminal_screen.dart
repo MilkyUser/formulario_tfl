@@ -159,25 +159,60 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
     return null;
   }
 
-Future<void> _abrirSeletorFoto(int index) async {
-    // 1. Usamos o pickMultiImage para abrir a galeria permitindo selecionar várias de uma vez
-    final List<XFile> fotosSelecionadas = await _picker.pickMultiImage(
-      imageQuality: 85, // Mantém a compactação ativa para todas
+// --- FLUXO DE SELEÇÃO CORRIGIDO ---
+
+  // Método auxiliar que gerencia a escolha do usuário e retorna uma lista de XFile
+  Future<List<XFile>> _escolherOrigemImagensMultiplas() async {
+    final ImageSource? fonte = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.indigo),
+              title: const Text('Tirar Foto (Câmera)'),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.indigo),
+              title: const Text('Escolher da Galeria (Múltiplas)'),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
     );
 
+    if (fonte == ImageSource.camera) {
+      // Se for câmera, tira uma foto única e retorna em uma lista de um elemento
+      final XFile? foto = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      return foto != null ? [foto] : [];
+    } else if (fonte == ImageSource.gallery) {
+      // Se for galeria, permite selecionar várias imagens de uma vez só!
+      return await _picker.pickMultiImage(
+        imageQuality: 85,
+      );
+    }
+    return [];
+  }
+
+  Future<void> _abrirSeletorFoto(int index) async {
+    // Busca a lista de fotos (seja a única da câmera ou as várias da galeria)
+    final List<XFile> fotosSelecionadas = await _escolherOrigemImagensMultiplas();
+
     if (fotosSelecionadas.isNotEmpty) {
-      // Criamos cópias seguras das listas atuais do periférico
       List<String> nomesAtualizados = List<String>.from(_perifericos[index]['fotos_nomes']);
       List<List<int>> bytesAtualizados = List<List<int>>.from(_perifericos[index]['fotos_bytes']);
 
-      // 2. Lemos os bytes de cada foto selecionada e adicionamos nas listas
       for (var foto in fotosSelecionadas) {
         final bytes = await foto.readAsBytes();
         nomesAtualizados.add(foto.name);
         bytesAtualizados.add(bytes);
       }
 
-      // 3. Atualizamos o estado do widget
       setState(() {
         _perifericos[index]['fotos_nomes'] = nomesAtualizados;
         _perifericos[index]['fotos_bytes'] = bytesAtualizados;
@@ -186,9 +221,8 @@ Future<void> _abrirSeletorFoto(int index) async {
   }
 
   Future<void> _abrirSeletorFotoPrincipal(bool esEtiqueta) async {
-    final List<XFile> fotosSelecionadas = await _picker.pickMultiImage(
-      imageQuality: 85,
-    );
+    // Busca a lista de fotos (seja a única da câmera ou as várias da galeria)
+    final List<XFile> fotosSelecionadas = await _escolherOrigemImagensMultiplas();
 
     if (fotosSelecionadas.isNotEmpty) {
       List<String> nomesNovos = [];
@@ -211,6 +245,7 @@ Future<void> _abrirSeletorFoto(int index) async {
       });
     }
   }
+
 
   // --- MODAL INSTRUTIVO EXCLUSIVO PARA O AMBIENTE WEB ---
   void _mostrarAvisoAnexoWeb(String nomeArquivo, VoidCallback onConfirmar) {

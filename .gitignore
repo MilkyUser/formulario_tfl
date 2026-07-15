@@ -43,7 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-
 # Ajustes extras para compilação iOS no Codemagic
 ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
