@@ -552,7 +552,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
         : "";
     final String corpoMensagemBase =
         "Ola,\n\n"
-        "A vistoria de recebimento tecnico do terminal de numero de serie ${_numeroSerieController.text} (Modelo: $_modeloSelecionado) foi concluida.\n\n"
+        "A vistoria de recebimento técnico do terminal de numero de serie ${_numeroSerieController.text} (Modelo: $_modeloSelecionado) foi concluida.\n\n"
         "$linhaCorpoReq" // <--- A linha da REQ entra magicamente aqui (apenas se não for vazia)
         "Os dados brutos e fotos comprimidas seguem empacotados no arquivo: $nomeArquivoZip.\n\n"
         "Att,\n"
@@ -623,7 +623,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Recebimento Tecnico de Terminais'),
+        title: const Text('Recebimento Técnico de Terminais'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
