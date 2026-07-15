@@ -428,6 +428,74 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
     );
   }
 
+    String _gerarConteudoCSV() {
+    final String serie = _numeroSerieController.text;
+    final String req = _numeroReqController.text.trim();
+    final String modelo = _modeloSelecionado ?? '';
+
+    StringBuffer csvBuffer = StringBuffer();
+    csvBuffer.writeln('série;req;modelo terminal;tipo foto;endereço foto;observações');
+
+    // 1. Fotos da Etiqueta
+    for (var nome in _etiquetaNomes) {
+      csvBuffer.writeln('$serie;$req;$modelo;Etiqueta;imagens/${serie}_etiqueta_$nome;');
+    }
+
+    // 2. Fotos do Kit Completo
+    for (var nome in _kitCompletoNomes) {
+      csvBuffer.writeln('$serie;$req;$modelo;Kit Completo;imagens/${serie}_kit_$nome;');
+    }
+
+    // 3. Periféricos
+    for (var p in _perifericos) {
+      if (p['possui'] == true) {
+        List<String> nomesFotos = List<String>.from(p['fotos_nomes']);
+        String obs = p['obs'].text.replaceAll(';', ',').replaceAll('\n', ' '); 
+
+        if (nomesFotos.isEmpty) {
+          csvBuffer.writeln('$serie;$req;$modelo;${p['nome']};;$obs');
+        } else {
+          for (var nome in nomesFotos) {
+            csvBuffer.writeln('$serie;$req;$modelo;${p['nome']};imagens/${serie}_$nome;$obs');
+          }
+        }
+      }
+    }
+    return csvBuffer.toString();
+  }
+
+  Future<void> _exportarApenasCSV() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final String csvString = _gerarConteudoCSV();
+    final Uint8List csvBytes = utf8.encode(csvString);
+    final String nomeArquivoCsv = "obs_${_numeroSerieController.text}.csv";
+
+    if (kIsWeb) {
+      final blob = html.Blob([csvBytes], 'text/csv;charset=utf-8');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute("download", nomeArquivoCsv)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } else {
+      final directory = await getTemporaryDirectory();
+      final stringPath = '${directory.path}/$nomeArquivoCsv';
+      final file = io.File(stringPath);
+      await file.writeAsBytes(csvBytes);
+
+      if (!mounted) return;
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(stringPath)],
+          subject: 'CSV Vistoria - ${_numeroSerieController.text}',
+          text: 'Relatório CSV gerado para o terminal ${_numeroSerieController.text}.',
+        ),
+      );
+    }
+  }
+
   // --- PROCESSAMENTO PRINCIPAL COM REGRAS DE COMPARTILHAMENTO HIBRIDO ---
   Future<void> _processarEEnviar() async {
     if (!_formKey.currentState!.validate()) return;
@@ -501,6 +569,10 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
     var encoder = Archive();
     List<int> jsonBytes = utf8.encode(jsonString);
     encoder.addFile(ArchiveFile('dados.json', jsonBytes.length, jsonBytes));
+
+    String csvString = _gerarConteudoCSV();
+    List<int> csvBytes = utf8.encode(csvString);
+    encoder.addFile(ArchiveFile('obs.csv', csvBytes.length, csvBytes));
 
     for (int i = 0; i < _etiquetaNomes.length; i++) {
       encoder.addFile(
@@ -1017,6 +1089,27 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                       'Compactar dados e Enviar E-mail',
                       style: TextStyle(
                         color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Novo Botão: Apenas o relatório CSV
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _exportarApenasCSV,
+                    icon: const Icon(Icons.table_chart, color: Colors.green),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.green, width: 2),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    label: const Text(
+                      'Exportar apenas Relatório CSV',
+                      style: TextStyle(
+                        color: Colors.green,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
