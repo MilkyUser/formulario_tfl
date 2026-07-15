@@ -319,7 +319,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                       child: Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.indigo.withOpacity(0.3)),
+                          border: Border.all(color: Colors.indigo.withValues(alpha: 0.3)),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(7),
@@ -599,6 +599,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
         // 3. Dispara diretamente o Gmail/Outlook com tudo preenchido
         await FlutterEmailSender.send(email);
       } catch (error) {
+        if (!mounted) return;
         // Caso ocorra falha (ex: celular sem nenhum app de e-mail configurado), usa o plano B
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -607,10 +608,12 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
             ),
           ),
         );
-        await Share.shareXFiles(
-          [XFile(stringPath)],
-          subject: assuntoPadrao,
-          text: corpoMensagemBase,
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(stringPath)],
+            subject: assuntoPadrao,
+            text: corpoMensagemBase,
+          ),
         );
       }
     }
@@ -675,7 +678,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                 ),
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
-                  value: _modeloSelecionado,
+                  initialValue: _modeloSelecionado,
                   decoration: const InputDecoration(
                     labelText: 'Modelo do Terminal *',
                     border: OutlineInputBorder(),
@@ -827,7 +830,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                                     : 'Status: Nao possui',
                               ),
                               value: peri['possui'],
-                              activeColor: Colors.indigo,
+                              activeThumbColor: Colors.indigo,
                               onChanged: (bool value) {
                                 setState(() {
                                   peri['possui'] = value;
@@ -860,7 +863,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                                     vertical: 5,
                                   ),
                                   child: DropdownButtonFormField<String>(
-                                    value: peri['modelo'],
+                                    initialValue: peri['modelo'],
                                     decoration: const InputDecoration(
                                       labelText: 'Modelo do Pinpad *',
                                       border: OutlineInputBorder(),
