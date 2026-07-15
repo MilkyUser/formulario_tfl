@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 // Importacao dos pacotes instalados
 import 'package:archive/archive_io.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:file_picker/file_picker.dart';
+//import 'package:file_picker/file_picker.dart';
 
 // Importacoes especificas para Mobile
 import 'package:path_provider/path_provider.dart';
@@ -129,36 +129,6 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
     super.dispose();
   }
 
-  // Função auxiliar para pegar a imagem da fonte escolhida (Câmera ou Galeria)
-  Future<XFile?> _escolherOrigemImagem() async {
-    ImageSource? fonte = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.indigo),
-              title: const Text('Tirar Foto (Câmera)'),
-              onTap: () => Navigator.of(context).pop(ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.indigo),
-              title: const Text('Escolher da Galeria'),
-              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (fonte != null) {
-      return await _picker.pickImage(
-        source: fonte,
-        imageQuality: 85,
-      ); // Compacta levemente para não estourar o e-mail
-    }
-    return null;
-  }
-
 // --- FLUXO DE SELEÇÃO CORRIGIDO ---
 
   // Método auxiliar que gerencia a escolha do usuário e retorna uma lista de XFile
@@ -244,6 +214,152 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
         }
       });
     }
+  }
+
+  // --- NOVA INTERFACE DE VISUALIZAÇÃO DE IMAGEM AMPLIADA (MODAL) ---
+  void _visualizarImagemGrande(Uint8List imageBytes, String nome) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(15),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(
+                  imageBytes,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 15,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  nome,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- COMPONENTE VISUAL PARA GERENCIAR A LISTA DE FOTOS ---
+  Widget _buildGerenciadorFotos({
+    required List<String> nomes,
+    required List<List<int>> bytesList,
+    required VoidCallback onRemoverTodas,
+    required Function(int) onRemoverUnica,
+  }) {
+    if (bytesList.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '${nomes.length} foto(s) anexada(s):',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo),
+            ),
+            TextButton.icon(
+              onPressed: onRemoverTodas,
+              icon: const Icon(Icons.delete_sweep, size: 16, color: Colors.red),
+              label: const Text('Limpar todas', style: TextStyle(fontSize: 12, color: Colors.red)),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        SizedBox(
+          height: 80,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: bytesList.length,
+            itemBuilder: (context, idx) {
+              final imgBytes = Uint8List.fromList(bytesList[idx]);
+              final nomeImg = nomes[idx];
+
+              return Container(
+                margin: const EdgeInsets.only(right: 10),
+                width: 80,
+                child: Stack(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _visualizarImagemGrande(imgBytes, nomeImg),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.indigo.withOpacity(0.3)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(7),
+                          child: Image.memory(
+                            imgBytes,
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: GestureDetector(
+                        onTap: () => onRemoverUnica(idx),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
   }
 
 
@@ -370,8 +486,9 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
               .map((nome) => "imagens/${_numeroSerieController.text}_$nome")
               .toList();
           if (p['nome'] == 'Pinpad') info["modelo_especifico"] = p['modelo'];
-          if (p['nome'] == 'Leitor Biometrico')
+          if (p['nome'] == 'Leitor Biometrico') {
             info["minex_iii"] = p['minex_iii'];
+          }
         }
         return info;
       }).toList(),
@@ -422,8 +539,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
       }
     }
 
-    List<int>? zipData = ZipEncoder().encode(encoder);
-    if (zipData == null) return;
+    List<int> zipData = ZipEncoder().encode(encoder);
 
     String nomeArquivoZip = "recebimento_${_numeroSerieController.text}.zip";
 
@@ -445,7 +561,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
     if (kIsWeb) {
       final blob = html.Blob([zipData], 'application/zip');
       final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.AnchorElement(href: url)
+      html.AnchorElement(href: url)
         ..setAttribute("download", nomeArquivoZip)
         ..click();
       html.Url.revokeObjectUrl(url);
@@ -537,8 +653,9 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                     prefixIcon: Icon(Icons.pin),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty)
+                    if (value == null || value.isEmpty){
                       return 'Campo obrigatorio';
+                    }
                     return null;
                   },
                 ),
@@ -577,6 +694,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
 
                 const SizedBox(height: 20),
 
+                // --- GERENCIAMENTO DE FOTOS: ETIQUETA ---
                 Row(
                   children: [
                     ElevatedButton.icon(
@@ -605,8 +723,25 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                     ),
                   ],
                 ),
+                _buildGerenciadorFotos(
+                  nomes: _etiquetaNomes,
+                  bytesList: _etiquetaBytes,
+                  onRemoverTodas: () {
+                    setState(() {
+                      _etiquetaNomes.clear();
+                      _etiquetaBytes.clear();
+                    });
+                  },
+                  onRemoverUnica: (idx) {
+                    setState(() {
+                      _etiquetaNomes.removeAt(idx);
+                      _etiquetaBytes.removeAt(idx);
+                    });
+                  },
+                ),
                 const SizedBox(height: 15),
 
+                // --- GERENCIAMENTO DE FOTOS: KIT COMPLETO ---
                 Row(
                   children: [
                     ElevatedButton.icon(
@@ -634,6 +769,22 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                       ),
                     ),
                   ],
+                ),
+                _buildGerenciadorFotos(
+                  nomes: _kitCompletoNomes,
+                  bytesList: _kitCompletoBytes,
+                  onRemoverTodas: () {
+                    setState(() {
+                      _kitCompletoNomes.clear();
+                      _kitCompletoBytes.clear();
+                    });
+                  },
+                  onRemoverUnica: (idx) {
+                    setState(() {
+                      _kitCompletoNomes.removeAt(idx);
+                      _kitCompletoBytes.removeAt(idx);
+                    });
+                  },
                 ),
 
                 const SizedBox(height: 35),
@@ -684,10 +835,12 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                                     peri['obs'].clear();
                                     peri['fotos_nomes'] = <String>[];
                                     peri['fotos_bytes'] = <List<int>>[];
-                                    if (peri.containsKey('modelo'))
+                                    if (peri.containsKey('modelo')){
                                       peri['modelo'] = null;
-                                    if (peri.containsKey('minex_iii'))
+                                    }
+                                    if (peri.containsKey('minex_iii')){
                                       peri['minex_iii'] = null;
+                                    }
                                   }
                                 });
                               },
@@ -816,6 +969,26 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                                       ),
                                     ),
                                   ],
+                                ),
+                              ),
+                              // --- GERENCIAMENTO DE FOTOS: PERIFÉRICOS ---
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: _buildGerenciadorFotos(
+                                  nomes: List<String>.from(peri['fotos_nomes']),
+                                  bytesList: List<List<int>>.from(peri['fotos_bytes']),
+                                  onRemoverTodas: () {
+                                    setState(() {
+                                      peri['fotos_nomes'] = <String>[];
+                                      peri['fotos_bytes'] = <List<int>>[];
+                                    });
+                                  },
+                                  onRemoverUnica: (idx) {
+                                    setState(() {
+                                      (peri['fotos_nomes'] as List).removeAt(idx);
+                                      (peri['fotos_bytes'] as List).removeAt(idx);
+                                    });
+                                  },
                                 ),
                               ),
                               const SizedBox(height: 10),
