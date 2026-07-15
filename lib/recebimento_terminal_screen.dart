@@ -464,38 +464,101 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
     return csvBuffer.toString();
   }
 
-  Future<void> _exportarApenasCSV() async {
+Future<void> _exportarZipComCSV() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final String csvString = _gerarConteudoCSV();
-    final Uint8List csvBytes = utf8.encode(csvString);
-    final String nomeArquivoCsv = "obs_${_numeroSerieController.text}.csv";
+    // Garante que as fotos obrigatórias estão presentes antes de gerar o pacote
+    if (_etiquetaBytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, anexe a foto da etiqueta.')),
+      );
+      return;
+    }
+    if (_kitCompletoBytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, anexe a foto do kit completo.')),
+      );
+      return;
+    }
+
+    final String serie = _numeroSerieController.text;
+    var encoder = Archive();
+
+    // 1. 📊 Gera o conteúdo do CSV e adiciona na raiz do ZIP
+    String csvString = _gerarConteudoCSV();
+    List<int> csvBytes = utf8.encode(csvString);
+    encoder.addFile(ArchiveFile('obs.csv', csvBytes.length, csvBytes));
+
+    // 2. 🖼️ Adiciona as fotos da Etiqueta
+    for (int i = 0; i < _etiquetaNomes.length; i++) {
+      encoder.addFile(
+        ArchiveFile(
+          'imagens/${serie}_etiqueta_${_etiquetaNomes[i]}',
+          _etiquetaBytes[i].length,
+          _etiquetaBytes[i],
+        ),
+      );
+    }
+
+    // 3. 🖼️ Adiciona as fotos do Kit Completo
+    for (int i = 0; i < _kitCompletoNomes.length; i++) {
+      encoder.addFile(
+        ArchiveFile(
+          'imagens/${serie}_kit_${_kitCompletoNomes[i]}',
+          _kitCompletoBytes[i].length,
+          _kitCompletoBytes[i],
+        ),
+      );
+    }
+
+    // 4. 🖼️ Adiciona as fotos dos Periféricos ativos
+    for (var p in _perifericos) {
+      if (p['possui'] == true) {
+        List<String> nomes = p['fotos_nomes'] as List<String>;
+        List<List<int>> bytesList = p['fotos_bytes'] as List<List<int>>;
+        for (int i = 0; i < nomes.length; i++) {
+          String nomeArquivo = "${serie}_${nomes[i]}";
+          encoder.addFile(
+            ArchiveFile(
+              'imagens/$nomeArquivo',
+              bytesList[i].length,
+              bytesList[i],
+            ),
+          );
+        }
+      }
+    }
+
+    // 📦 Codifica tudo em um arquivo ZIP físico temporário
+    List<int> zipData = ZipEncoder().encode(encoder);
+    String nomeArquivoZip = "fotos_e_relatorio_$serie.zip";
 
     if (kIsWeb) {
-      final blob = html.Blob([csvBytes], 'text/csv;charset=utf-8');
+      // Fluxo Web: Download direto do arquivo ZIP no navegador
+      final blob = html.Blob([zipData], 'application/zip');
       final url = html.Url.createObjectUrlFromBlob(blob);
       html.AnchorElement(href: url)
-        ..setAttribute("download", nomeArquivoCsv)
+        ..setAttribute("download", nomeArquivoZip)
         ..click();
       html.Url.revokeObjectUrl(url);
     } else {
+      // Fluxo Mobile: Salva temporariamente e abre a folha de compartilhamento nativo
       final directory = await getTemporaryDirectory();
-      final stringPath = '${directory.path}/$nomeArquivoCsv';
+      final stringPath = '${directory.path}/$nomeArquivoZip';
       final file = io.File(stringPath);
-      await file.writeAsBytes(csvBytes);
+      await file.writeAsBytes(zipData);
 
       if (!mounted) return;
 
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(stringPath)],
-          subject: 'CSV Vistoria - ${_numeroSerieController.text}',
-          text: 'Relatório CSV gerado para o terminal ${_numeroSerieController.text}.',
+          subject: 'Relatório e Fotos - Terminal $serie',
+          text: 'Seguem em anexo as fotos e o relatório de vistoria do terminal $serie.',
         ),
       );
     }
   }
-
   // --- PROCESSAMENTO PRINCIPAL COM REGRAS DE COMPARTILHAMENTO HIBRIDO ---
   Future<void> _processarEEnviar() async {
     if (!_formKey.currentState!.validate()) return;
@@ -1086,7 +1149,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: const Text(
-                      'Compactar dados e Enviar E-mail',
+                      'Compactar dados e enviar e-mail',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -1100,14 +1163,14 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: _exportarApenasCSV,
+                    onPressed: _exportarZipComCSV,
                     icon: const Icon(Icons.table_chart, color: Colors.green),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.green, width: 2),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     label: const Text(
-                      'Exportar apenas Relatório CSV',
+                      'Exportar Relatório',
                       style: TextStyle(
                         color: Colors.green,
                         fontSize: 16,
