@@ -772,7 +772,7 @@ Future<void> _exportarZipComCSV() async {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Dados Principais do Terminal',
+                  'Dados do Terminal',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -928,7 +928,7 @@ Future<void> _exportarZipComCSV() async {
 
                 const SizedBox(height: 35),
                 const Text(
-                  'Verificacao de Peças e Periféricos',
+                  'Peças e Periféricos',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
