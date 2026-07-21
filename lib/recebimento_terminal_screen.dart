@@ -36,6 +36,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
 
   String? _modeloSelecionado;
   final List<String> _modelosDisponiveis = [
+    '4020',
     '4020A',
     '4020B',
     '4020-001',
