@@ -84,6 +84,13 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
       'minex_iii': null,
     },
     {
+      'nome': 'Nobreak',
+      'possui': false,
+      'obs': TextEditingController(),
+      'fotos_nomes': <String>[],
+      'fotos_bytes': <List<int>>[],
+    },
+    {
       'nome': 'Leitor de Codigo de Barras e Suporte',
       'possui': false,
       'obs': TextEditingController(),
@@ -105,7 +112,7 @@ class _RecebimentoTerminalScreenState extends State<RecebimentoTerminalScreen> {
       'fotos_bytes': <List<int>>[],
     },
     {
-      'nome': 'Nobreak',
+      'nome': 'Mouse',
       'possui': false,
       'obs': TextEditingController(),
       'fotos_nomes': <String>[],
