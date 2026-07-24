@@ -688,14 +688,14 @@ Future<void> _exportarZipComCSV() async {
 
     const String emailDestinopadrao = "ciaussp07@caixa.gov.br";
     final String assuntoPadrao =
-        "Vistoria Tecnica - TFL Serial: ${_numeroSerieController.text}";
+        "Vistoria Técnica - TFL Serial: ${_numeroSerieController.text}";
     final String reqDigitada = _numeroReqController.text.trim();
     final String linhaCorpoReq = reqDigitada.isNotEmpty
         ? "REQ: $reqDigitada\n\n"
         : "";
     final String corpoMensagemBase =
-        "Ola,\n\n"
-        "A vistoria de recebimento técnico do terminal de numero de serie ${_numeroSerieController.text} (Modelo: $_modeloSelecionado) foi concluida.\n\n"
+        "Olá,\n\n"
+        "A vistoria de recebimento técnico do terminal de número de série ${_numeroSerieController.text} (Modelo: $_modeloSelecionado) foi concluída.\n\n"
         "$linhaCorpoReq" // <--- A linha da REQ entra magicamente aqui (apenas se não for vazia)
         "Os dados brutos e fotos comprimidas seguem empacotados no arquivo: $nomeArquivoZip.\n\n"
         "Att,\n"
@@ -747,7 +747,7 @@ Future<void> _exportarZipComCSV() async {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Erro ao abrir app de e-mail. Usando compartilhamento padrao...',
+              'Erro ao abrir app de e-mail. Usando compartilhamento padrão...',
             ),
           ),
         );
@@ -794,7 +794,7 @@ Future<void> _exportarZipComCSV() async {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                    labelText: 'Numero de Serie (Apenas Numeros) *',
+                    labelText: 'Numero de Serie (Apenas Números) *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.pin),
                   ),
@@ -1034,7 +1034,7 @@ Future<void> _exportarZipComCSV() async {
                                   child: Row(
                                     children: [
                                       const Text(
-                                        'E padrao MINEX III? * ',
+                                        'É padrao MINEX III? * ',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -1074,7 +1074,7 @@ Future<void> _exportarZipComCSV() async {
                                   keyboardType: TextInputType
                                       .multiline, // Permite que a tecla "Enter" quebre a linha no teclado do celular
                                   decoration: const InputDecoration(
-                                    labelText: 'Observacoes da peça/periférico',
+                                    labelText: 'Observações da peça/periférico',
                                     border: OutlineInputBorder(),
                                     alignLabelWithHint:
                                         true, // Garante que o texto de dica/rótulo comece no topo quando o campo expandir
